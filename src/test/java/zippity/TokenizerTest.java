@@ -22,15 +22,19 @@ public class TokenizerTest {
 	
 	private String ASCII = "ASCII stands for American Standard Code for Information Interchange. Computers can only understand numbers, so an ASCII code is the numerical representation of a character such as 'a' or '@' or an action of some sort. ASCII was developed a long time ago and now the non-printing characters are rarely used for their original purpose. Below is the ASCII character table and this includes descriptions of the first 32 non-printing characters. ASCII was actually designed for use with teletypes and so the descriptions are somewhat obscure. If someone says they want your CV however in ASCII format, all this means is they want 'plain' text with no formatting such as tabs, bold or underscoring - the raw format that any computer can understand. This is usually so they can easily import the file into their own applications without issues. Notepad.exe creates ASCII text, or in MS Word you can save a file as 'text only'.";
 
+	private String ABCASDF = "abcASDFdefASDFghiASDFjklASDFmnoASDFpqrASDFstuASDFvwxASDFyz";
+
 	private int MAX_PARTS = 95;// we encode in ASCII using characters 32 to 126
 
 	@Test
 	public void testSplitter() {
+		Numberedizer numberedizer = new Numberedizer();
+
 		List<Part> parts = new ArrayList<>();
 		parts.add(new Part("heel veel", false));
 		parts.add(new Part("scheelt het niet", false));
 		
-		List<Part> result = new Tokenizer().splitOn(parts, "eel");
+		List<Part> result = new Tokenizer(new Numberedizer()).splitOn(parts, "eel");
 		
 		for (Part part : result) {
 			System.out.println(part.part + ":" + part.isToken());
@@ -39,8 +43,10 @@ public class TokenizerTest {
 
 	@Test
 	public void testTotHufftable() {
+		Numberedizer numberedizer = new Numberedizer();
+
 		String input = LIPSUM;
-		List<Part> parts = new Tokenizer().split(input,MAX_PARTS);
+		List<Part> parts = new Tokenizer(numberedizer).split(input,MAX_PARTS);
 
 //		for (Part part : parts) {
 //			System.out.println(part.part);
@@ -61,13 +67,15 @@ public class TokenizerTest {
 
 	@Test
 	public void testAsNumberedList() {
+		Numberedizer numberedizer = new Numberedizer();
+
 		String input = DE_FINIBUS; //.toLowerCase();
-		List<Part> parts = new Tokenizer().split(input, MAX_PARTS);
+		List<Part> parts = new Tokenizer(numberedizer).split(input, MAX_PARTS);
 
 
 		List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
 		
-		String result = new Numberedizer().encode(parts, freq, 'X');
+		String result = numberedizer.encode(parts, freq, 'X');
 
 		System.out.println("\nInput size  : " + input.length());
 		System.out.println("Output size : " + result.length());
@@ -94,27 +102,57 @@ public class TokenizerTest {
 	}
 
 	@Test
-	public void testAllInputs() {
+	public void testNumberedizer() {
 		String[] inputs = {
 				LIPSUM,
 				DE_FINIBUS,
-//				NEQUE,
-//				LIESJE,
+				NEQUE,
+				LIESJE,
 				ASCII,
-				LILINGUES
+				LILINGUES,
+				ABCASDF
 			};
 		
 		for (String input : inputs) {
-			input = input.toLowerCase();
-			List<Part> parts = new Tokenizer().split(input, MAX_PARTS);
+			Numberedizer numberedizer = new Numberedizer();
+			List<Part> parts = new Tokenizer(numberedizer).split(input, MAX_PARTS);
 			List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
-			String result = new Numberedizer().encode(parts, freq, 'X');
+			String result = numberedizer.encode(parts, freq, 'X');
 			
 			System.out.println("\nInput size  : " + input.length());
 			System.out.println("Output size : " + result.length());
 
-			System.out.println(result);
 			System.out.println(input);
+			System.out.println(result);
+			System.out.println(new DecodeNumbered().decode(result, 'X'));
 		}
 	}
+
+	@Test
+	public void testInliner() {
+		String[] inputs = {
+				LIPSUM,
+				DE_FINIBUS,
+				NEQUE,
+				LIESJE,
+				ASCII,
+				LILINGUES,
+				ABCASDF
+			};
+		
+		for (String input : inputs) {
+			Inliner inliner = new Inliner();
+			List<Part> parts = new Tokenizer(inliner).split(input, MAX_PARTS);
+			List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
+			String result = inliner.encode(parts, freq, 'X');
+			
+			System.out.println("\nInput size  : " + input.length());
+			System.out.println("Output size : " + result.length());
+
+			System.out.println(input);
+			System.out.println(result);
+			System.out.println(inliner.decode(result, 'X'));
+		}
+	}
+
 }

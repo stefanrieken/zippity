@@ -13,7 +13,11 @@ public class Tokenizer {
 	private int maxPartSize;
 	private int minPartSize;
 
-	public Tokenizer() {
+	private EncodingSpecifics encodingSpecifics;
+
+	public Tokenizer(EncodingSpecifics encodingSpecifics) {
+		this.encodingSpecifics = encodingSpecifics;
+		this.maxParts = encodingSpecifics.getMaxParts();
 	}
 
 	public List<Part> split(String input, int maxParts) {
@@ -50,7 +54,7 @@ public class Tokenizer {
 				for (int j = 0; j <= part.part.length()-chunkSize; j++) {
 					String sub = part.part.substring(j, j+chunkSize);
 					int repeats = findRepeats(part, sub);
-					if (isCandidateForToken(sub, repeats)) {
+					if (encodingSpecifics.isCostEffectiveToken(sub, repeats)) {
 						return sub;
 					}
 				}
@@ -59,20 +63,20 @@ public class Tokenizer {
 		return null;
 	}
 	
-	// tokenizing the repeat is advantageous when:
+	// alternative implementation for Inliner.
 	//
-	// dict entry + (1+n)*separator + n mentions * mentionsize * 2 < n * original string - X
+	// A split introduces:
+	// - a dictionary item followed by a separator
+	// - an extra separator for each string split by it
+	// - an extra separator for each mention
 	//
-	// a dict entry adds a separator + n extra separators for strings in which it occurs.
+	//  separator + dict entry + separator + (n-1 * mention) < n * string size
 	//
-	// splitting a string turns one mention into three, so adds n*2 mentions.
-	//
-	// X is a guess number that says: if the win is so minimal, leave the string as-is;
-	// maybe another tokenization yields a better result. Turns out, setting X to 1
-	// means you win on some, lose on others.
-	private boolean isCandidateForToken(String sub, int repeats) {
-		return sub.length() + (1+repeats) + repeats * 2 < repeats * sub.length() - 1;
-	}
+	// cost of mention
+
+//	 private boolean isCandidateForToken(String sub, int repeats) {
+//		 return sub.length() + 1 + (repeats *2) < repeats* sub.length();
+//	}
 
 	public int findRepeats(Part current, String sub) {
 		
