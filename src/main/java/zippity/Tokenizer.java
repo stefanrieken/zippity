@@ -2,77 +2,120 @@ package zippity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Stack;
 
-import zippity.model.HTreeNode;
-import zippity.model.Range;
+import zippity.model.Part;
 
 public class Tokenizer {
 	
-	private String input;
+	List<Part> parts = new ArrayList<>();
+	
+	private int maxParts;
+	private int maxPartSize;
+	private int minPartSize;
 
-	List<Range> parts = new ArrayList<>();
-
-	public Tokenizer(String input) {
-		this.input = input;
+	public Tokenizer() {
 	}
 
-	public List<HTreeNode> encode() {
+	public List<Part> split(String input, int maxParts) {
+		this.maxParts = maxParts; // may be as high as encoder can handle
+		minPartSize = 2; // below 2 is also safe, but makes no sense searching
+		maxPartSize = 32; // can safely use input.size()/2; but this is much faster. longest token in 'li lingues' is 29.
+		
+		parts.add(new Part(input, false));
 		analyzeParts();
-		return partsToTokens();
+		return parts;
 	}
 
 	public void analyzeParts() {
 		
-		for (int chunkSize=input.length()/2; chunkSize > 1; chunkSize--) {
-			for (int j = 0; j <= input.length()-chunkSize; j++) {
-				findRepeatedSubstring(j, j+chunkSize);
-			}
+		String token = findToken();
+		
+		List<Part> newParts = parts;
+
+		while (token != null && newParts.size() < maxParts) {
+			parts = newParts;
+			newParts = splitOn(parts, token);
+			token = findToken();
 		}
 	}
 	
-	private void findRepeatedSubstring(int start, int end) {
-		String sub = input.substring(start, end);
-		boolean added = false;
+	public String findToken() {
 
-		for (int i=0; i+sub.length() <= input.length(); i++) {
-			if (i+sub.length() <= start || i >= end) {
-				boolean covered = false;
-				
-				for (Range part : parts) {
-					covered |= (i+sub.length() > part.start) && (i < part.end);
-				}
-				
-				if (!covered) {
-					String sub2 = input.substring(i, i+sub.length());
+		for (Part part : parts) {
 
-					if (sub.equals(sub2)) {
-						if (!added) parts.add(new Range(start, end));
-						parts.add(new Range(i, i+sub.length()));
-						added=true;
+			int halfPartSize = part.part.length() / 2;
+			int maxChunkSize = Math.min(halfPartSize,  maxPartSize);
+
+			for (int chunkSize=maxChunkSize; chunkSize >= minPartSize; chunkSize--) {
+				for (int j = 0; j <= part.part.length()-chunkSize; j++) {
+					String sub = part.part.substring(j, j+chunkSize);
+					int repeats = findRepeats(part, sub);
+					if (isCandidateForToken(sub, repeats)) {
+						return sub;
 					}
 				}
 			}
 		}
+		return null;
+	}
+	
+	// tokenizing the repeat is advantageous when:
+	//
+	// dict entry + (1+n)*separator + n mentions * mentionsize * 2 < n * original string - X
+	//
+	// a dict entry adds a separator + n extra separators for strings in which it occurs.
+	//
+	// splitting a string turns one mention into three, so adds n*2 mentions.
+	//
+	// X is a guess number that says: if the win is so minimal, leave the string as-is;
+	// maybe another tokenization yields a better result. Turns out, setting X to 1
+	// means you win on some, lose on others.
+	private boolean isCandidateForToken(String sub, int repeats) {
+		return sub.length() + (1+repeats) + repeats * 2 < repeats * sub.length() - 1;
 	}
 
-	// TODO zijn nu sorted op size, zou moeten zijn op prevalence, dan size
-	private Stack<HTreeNode> partsToTokens() {
-		Stack<HTreeNode> tokens = new Stack<>();
+	public int findRepeats(Part current, String sub) {
 		
-		String prevSub = null;
+		int repeats = 0;
 
-		for (int i = parts.size()-1; i >=0; i--) {
-			Range part = parts.get(i);
-			String sub = input.substring(part.start, part.end);
+		for (Part part : parts) {
+			if (part.isToken()) continue;
 
-			if (sub.equals(prevSub))
-				tokens.get(tokens.size()-1).prevalence++;
-			else
-				tokens.add(new HTreeNode(sub));
+			int index = part.part.indexOf(sub, 0);
 
-			prevSub = sub;
+			while (index != -1) {
+				repeats++;
+				index = part.part.indexOf(sub, index+sub.length());
+			}
 		}
-		return tokens;
+		
+		return repeats;
+	}
+
+	public List<Part> splitOn(List<Part> parts, String sub) {
+		List<Part> result = new ArrayList<Part>();
+
+		for (Part part : parts) {
+			if (!part.isToken()) {
+			
+				int prevIndex = 0;
+				int index = part.part.indexOf(sub, prevIndex);
+	
+				while (index != -1) {
+					if (prevIndex != index)
+						result.add (new Part(part.part.substring(prevIndex, index), false));
+					result.add(new Part(sub, true));
+	
+					prevIndex = index+sub.length();
+					index = part.part.indexOf(sub, index+sub.length());
+				}
+				
+				if(prevIndex != part.part.length())
+					result.add(new Part(part.part.substring(prevIndex), false));
+			} else {
+				result.add(part);
+			}
+		}
+		return result;
 	}
 }
