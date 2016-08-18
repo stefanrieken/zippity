@@ -10,35 +10,42 @@ import zippity.model.Part;
  * Encode 'inline':
  * 
  * - Write all first mentions of a string out full, in sentence order, followed by a separator.
- * - Write all subsequent mentions as a separator followed by the number.
+ * - Write all subsequent mentions as a separator followed by the number of its first mention.
+ * 
+ * Variation:
+ * - Precede all first mentions (but the very first one) by a separator.
+ * - Write all subsequent mentions without one.
+ * 
+ * Cost is usually higher because most strings do not reoccur.
  */
 public class Inliner implements EncodingSpecifics {
 	public char BASE = 32;
 
 	@Override
 	public int getMaxParts() {
-		return 95; // because of encoding as readable ASCII
+		return Integer.MAX_VALUE; // due to this (only), Inliner wins from Numberedizer
 	}
 
-	// tokenizing the repeat is advantageous when:
-	//
-	// dict entry + (1+n)*separator + n mentions * mentionsize * 2 < n * original string - X
-	//
-	// a dict entry adds a separator + n extra separators for strings in which it occurs.
-	//
-	// splitting a string turns one mention into three, so adds n*2 mentions.
-	//
-	// X is a guess number that says: if the win is so minimal, leave the string as-is;
-	// maybe another tokenization yields a better result. Turns out, setting X to 1
-	// means you win on some, lose on others.
-	//
-	// NOTE: this whole calculation is dependent on the final encoding.
-	// This instance is optimized for encoding using the Numberedizer.
-	// We might improve on this by providing this function through an interface
-	// and implement different calculations for different encoders.
 	@Override
-	public boolean isCostEffectiveToken(String sub, int repeats) {
-		 return sub.length() + 1 + (repeats *2) < repeats* sub.length();
+	public int getMaxTokens() {
+		return 95; // because of encoding as readable ASCII
+	}
+	
+	// A split introduces:
+	// - a dictionary item followed by a separator
+	// - an extra separator for each string split by it
+	// - an extra separator for each mention
+	// - the mention itself
+	//
+	//  dict entry + separator + (n-1 * mention) < n * string size -X
+	//
+	// Here again there's a 'X' factor that introduces some heuristic prudence;
+	// again, this is win some, lose some. (noticeable loss: 'neque' compresses only at x=0)
+	// For this algorithm, '2' seems to work fairly well.
+	//
+	@Override
+	public int getCostEffectiveness(String sub, int repeats, int inputSize) {
+		 return (sub.length() + 1 + (repeats*3)) - (repeats * sub.length() - 0);
 	}
 
 	public String encode(List<Part> parts, List<HTreeNode> tokens, char separator) {
@@ -82,7 +89,7 @@ public class Inliner implements EncodingSpecifics {
 	}
 	
 	public String readToken(char[] chars, char separator) {
-		// read either NULL followed by a string, or a mention
+		// read either a(nother) separator followed by a mention, or a new string
 		if (index >= chars.length) return null;
 		if (chars[index] == separator) {
 			index++;

@@ -18,6 +18,11 @@ public class Numberedizer implements EncodingSpecifics {
 		return 95; // because of encoding as readable ASCII
 	}
 
+	@Override
+	public int getMaxTokens() {
+		return 95;
+	}
+
 	// tokenizing the repeat is advantageous when:
 	//
 	// dict entry + (1+n)*separator + n mentions * mentionsize * 2 < n * original string - X
@@ -28,15 +33,15 @@ public class Numberedizer implements EncodingSpecifics {
 	//
 	// X is a guess number that says: if the win is so minimal, leave the string as-is;
 	// maybe another tokenization yields a better result. Turns out, setting X to 1
-	// means you win on some, lose on others.
+	// means you win on some inputs and lose on others.
 	//
-	// NOTE: this whole calculation is dependent on the final encoding.
-	// This instance is optimized for encoding using the Numberedizer.
-	// We might improve on this by providing this function through an interface
-	// and implement different calculations for different encoders.
+	// For larger files, combined with a still limited maxParts, a larger 'X' yields
+	// better results because we expect bigger wins from words that are repeated more often.
+	// The real problem here is the limitation in maxParts (because we want to produce
+	// understandable ASCII).
 	@Override
-	public boolean isCostEffectiveToken(String sub, int repeats) {
-		return sub.length() + (1+repeats) + repeats * 2 < repeats * sub.length() - 1;
+	public int getCostEffectiveness(String sub, int repeats, int inputSize) {
+		return sub.length() + (1+repeats) + repeats * 2 - (repeats * sub.length() - 1);
 	}
 
 	public String encode(List<Part> parts, List<HTreeNode> tokens, char separator) {

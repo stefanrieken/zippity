@@ -1,5 +1,7 @@
 package zippity;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
@@ -24,8 +26,6 @@ public class TokenizerTest {
 
 	private String ABCASDF = "abcASDFdefASDFghiASDFjklASDFmnoASDFpqrASDFstuASDFvwxASDFyz";
 
-	private int MAX_PARTS = 95;// we encode in ASCII using characters 32 to 126
-
 	@Test
 	public void testSplitter() {
 		Numberedizer numberedizer = new Numberedizer();
@@ -46,7 +46,7 @@ public class TokenizerTest {
 		Numberedizer numberedizer = new Numberedizer();
 
 		String input = LIPSUM;
-		List<Part> parts = new Tokenizer(numberedizer).split(input,MAX_PARTS);
+		List<Part> parts = new Tokenizer(numberedizer).split(input);
 
 //		for (Part part : parts) {
 //			System.out.println(part.part);
@@ -70,7 +70,7 @@ public class TokenizerTest {
 		Numberedizer numberedizer = new Numberedizer();
 
 		String input = DE_FINIBUS; //.toLowerCase();
-		List<Part> parts = new Tokenizer(numberedizer).split(input, MAX_PARTS);
+		List<Part> parts = new Tokenizer(numberedizer).split(input);
 
 
 		List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
@@ -115,7 +115,7 @@ public class TokenizerTest {
 		
 		for (String input : inputs) {
 			Numberedizer numberedizer = new Numberedizer();
-			List<Part> parts = new Tokenizer(numberedizer).split(input, MAX_PARTS);
+			List<Part> parts = new Tokenizer(numberedizer).split(input);
 			List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
 			String result = numberedizer.encode(parts, freq, 'X');
 			
@@ -142,7 +142,7 @@ public class TokenizerTest {
 		
 		for (String input : inputs) {
 			Inliner inliner = new Inliner();
-			List<Part> parts = new Tokenizer(inliner).split(input, MAX_PARTS);
+			List<Part> parts = new Tokenizer(inliner).split(input);
 			List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
 			String result = inliner.encode(parts, freq, 'X');
 			
@@ -153,6 +153,51 @@ public class TokenizerTest {
 			System.out.println(result);
 			System.out.println(inliner.decode(result, 'X'));
 		}
+	}
+
+	/*
+	 * Both encodings appear dramatically bad with long files.
+	 * This is because they both depend on the same Tokenizer --
+	 * which is dramatically bad with long files.
+	 * 
+	 * What it does now, is search for the largest repeated strings
+	 * first.
+	 * 
+	 * What it should probably do, is search for the smallest (and
+	 * therefore often most common) tokens, and then, before adding,
+	 * test if adding one character more yields better results.
+	 */
+	@Test
+	public void testInlinerWithFile() throws Exception {
+		String input = new String(Files.readAllBytes(new File("../warre.txt").toPath()));
+		Inliner inliner = new Inliner();
+		List<Part> parts = new Tokenizer(inliner).split(input);
+		List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
+		String result = inliner.encode(parts, freq, 'X');
+
+		System.out.println("\nInput size  : " + input.length());
+		System.out.println("Output size : " + result.length());
+		System.out.println("Num tokens  : " + freq.stream().filter(a -> a.prevalence > 1).count());
+
+//		System.out.println(input);
+		System.out.println(result);
+//		System.out.println(inliner.decode(result, 'X'));
+	}
+
+	@Test
+	public void testNumberedizerWithFile() throws Exception {
+		String input = new String(Files.readAllBytes(new File("../warre.txt").toPath()));
+		Numberedizer numberedizer = new Numberedizer();
+		List<Part> parts = new Tokenizer(numberedizer).split(input);
+		List<HTreeNode> freq = new FrequencyAnalyzer().analyzeFrequency(parts);
+		String result = numberedizer.encode(parts, freq, 'X');
+		
+		System.out.println("\nInput size  : " + input.length());
+		System.out.println("Output size : " + result.length());
+
+//		System.out.println(input);
+		System.out.println(result);
+//		System.out.println(inliner.decode(result, 'X'));
 	}
 
 }

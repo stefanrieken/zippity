@@ -2,7 +2,10 @@ package zippity;
 
 public interface EncodingSpecifics {
 	
-	boolean isCostEffectiveToken(String sub, int repeats);
+	int getCostEffectiveness(String sub, int repeats, int inputSize);
+
+	// in how many parts can we split the string?
 	int getMaxParts();
 
+	int getMaxTokens();
 }

@@ -1,7 +1,9 @@
 package zippity;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import zippity.model.Part;
 
@@ -9,25 +11,45 @@ public class Tokenizer {
 	
 	List<Part> parts = new ArrayList<>();
 	
-	private int maxParts;
 	private int maxPartSize;
 	private int minPartSize;
+
+	private int inputSize;
 
 	private EncodingSpecifics encodingSpecifics;
 
 	public Tokenizer(EncodingSpecifics encodingSpecifics) {
 		this.encodingSpecifics = encodingSpecifics;
-		this.maxParts = encodingSpecifics.getMaxParts();
+		this.minPartSize = 2; // below 2 is also safe, but makes no sense searching
+		this.maxPartSize = 32; // can safely use input.size()/2; but this is much faster. longest token in 'li lingues' is 29.
 	}
 
-	public List<Part> split(String input, int maxParts) {
-		this.maxParts = maxParts; // may be as high as encoder can handle
-		minPartSize = 2; // below 2 is also safe, but makes no sense searching
-		maxPartSize = 32; // can safely use input.size()/2; but this is much faster. longest token in 'li lingues' is 29.
-		
+	public List<Part> split(String input) {
+		inputSize = input.length();
 		parts.add(new Part(input, false));
 		analyzeParts();
+		optimizeParts();
 		return parts;
+	}
+
+	public void optimizeParts() {
+		if (parts.size() == 1) return;
+
+		List<Part> result = new ArrayList<Part>();
+		result.add(parts.get(0));
+		
+		for (int i=1; i < parts.size(); i++) {
+			Part part = parts.get(i);
+			Part preceding = result.get(result.size()-1);
+			if (!part.isToken() && !preceding.isToken()) {
+				System.out.println("hier");
+				preceding.part = preceding.part + part.part;
+			} else {
+				result.add(part);
+			}
+		}
+		
+		parts = result;
 	}
 
 	public void analyzeParts() {
@@ -36,13 +58,28 @@ public class Tokenizer {
 		
 		List<Part> newParts = parts;
 
-		while (token != null && newParts.size() < maxParts) {
+		while (token != null && withinEncodingSpecifics(newParts)) {
 			parts = newParts;
 			newParts = splitOn(parts, token);
 			token = findToken();
 		}
 	}
 	
+	private boolean withinEncodingSpecifics(List<Part> parts) {
+		if (parts.size() > encodingSpecifics.getMaxParts())
+			return false;
+	
+		Map<String, Integer> numOccurrences = new HashMap<String,Integer>();
+		for (Part part : parts) {
+			Integer occurrence = numOccurrences.get(part.part);
+			if (occurrence == null) occurrence = 0;
+			occurrence++;
+			if (occurrence > encodingSpecifics.getMaxTokens()) return false;
+			numOccurrences.put(part.part, occurrence);
+		}
+		return true;
+	}
+
 	public String findToken() {
 
 		for (Part part : parts) {
@@ -50,34 +87,62 @@ public class Tokenizer {
 			int halfPartSize = part.part.length() / 2;
 			int maxChunkSize = Math.min(halfPartSize,  maxPartSize);
 
-			for (int chunkSize=maxChunkSize; chunkSize >= minPartSize; chunkSize--) {
-				for (int j = 0; j <= part.part.length()-chunkSize; j++) {
+//			// start-small algorithm:
+//			for (int j=0; j<= part.part.length()-minPartSize; j++) {
+//				String prevString = "";
+//				int prevRepeats = 0;
+//				int prevCost = Integer.MAX_VALUE;
+//
+//				for (int chunkSize=minPartSize; chunkSize <= maxChunkSize && j+chunkSize <= part.part.length(); chunkSize++) {
+//					String sub = part.part.substring(j, j+chunkSize);
+//					int repeats = findRepeats(part, sub);
+//					int cost = encodingSpecifics.getCostEffectiveness(sub, repeats, inputSize);
+//
+//					if (prevRepeats > 1 && prevCost < 0 && prevCost < cost)
+//						return prevString;
+//					
+//					prevString = sub;
+//					prevRepeats = repeats;
+//					prevCost = cost;
+//				}
+//			}
+//
+//			// trust-the-longest algorithm (works better with smaller files):
+//
+//			for (int chunkSize=maxChunkSize; chunkSize >= minPartSize; chunkSize--) {
+//				for (int j = 0; j <= part.part.length()-chunkSize; j++) {
+//					String sub = part.part.substring(j, j+chunkSize);
+//					int repeats = findRepeats(part, sub);
+//					if (encodingSpecifics.getCostEffectiveness(sub, repeats, inputSize) < 0) {
+//						return sub;
+//					}
+//				}
+//			}
+
+			// start-big algorithm:
+			for (int j=0; j<= part.part.length()-minPartSize; j++) {
+				String prevString = "";
+				int prevRepeats = 0;
+				int prevCost = Integer.MAX_VALUE;
+
+				for (int chunkSize=(maxChunkSize > part.part.length() - j ? part.part.length() - j : maxChunkSize); chunkSize >= minPartSize; chunkSize--) {
 					String sub = part.part.substring(j, j+chunkSize);
 					int repeats = findRepeats(part, sub);
-					if (encodingSpecifics.isCostEffectiveToken(sub, repeats)) {
-						return sub;
-					}
+					int cost = encodingSpecifics.getCostEffectiveness(sub, repeats, inputSize);
+
+					if (prevRepeats > 1 && prevCost < 0 && prevCost < cost)
+						return prevString;
+					
+					prevString = sub;
+					prevRepeats = repeats;
+					prevCost = cost;
 				}
 			}
+
 		}
 		return null;
 	}
 	
-	// alternative implementation for Inliner.
-	//
-	// A split introduces:
-	// - a dictionary item followed by a separator
-	// - an extra separator for each string split by it
-	// - an extra separator for each mention
-	//
-	//  separator + dict entry + separator + (n-1 * mention) < n * string size
-	//
-	// cost of mention
-
-//	 private boolean isCandidateForToken(String sub, int repeats) {
-//		 return sub.length() + 1 + (repeats *2) < repeats* sub.length();
-//	}
-
 	public int findRepeats(Part current, String sub) {
 		
 		int repeats = 0;
